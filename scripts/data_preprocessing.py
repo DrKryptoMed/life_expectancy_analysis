@@ -1,52 +1,61 @@
 import pandas as pd
 import numpy as np
 
-def preprocess_data(filepath):
+def clean_and_engineer(df):
     """
-    Cleans and prepares data, but leaves scaling for the training script 
-    to prevent data leakage.
+    Performs data cleaning, imputation, and feature engineering.
+    Prepares the 'df_engineered' dataset for statistical modeling.
     """
-    df = pd.read_csv(filepath)
-    
     # 1. Column Sanitization
     df.columns = df.columns.str.strip()
-    
-    # 2. Validity Corrections
-    df.loc[df['percentage expenditure'] > 100, 'percentage expenditure'] = np.nan
     df['Status'] = df['Status'].astype('category')
     
+    # 2. Validity Correction
+    # Correcting boundary error for health expenditure
+    df.loc[df['percentage expenditure'] > 100, 'percentage expenditure'] = np.nan
+    
     # 3. Imputation Strategy
+    # MCAR: Global Median
     mcar_cols = ['Life expectancy', 'Adult Mortality', 'Polio', 'Diphtheria']
     for col in mcar_cols:
         df[col] = df[col].fillna(df[col].median())
         
+    # MAR: Grouped Medians (Biological/Cultural)
     country_mar_cols = ['Alcohol', 'BMI', 'thinness  1-19 years', 'thinness 5-9 years']
     for col in country_mar_cols:
         df[col] = df.groupby('Country')[col].transform(lambda x: x.fillna(x.median()))
         
+    # Infrastructure/Policy: Interpolation & Status Median Fallback
     df['Population'] = df.groupby('Country')['Population'].transform(
         lambda x: x.interpolate(method='linear', limit_direction='both')
-    ).fillna(df['Population'].median())
+    ).fillna(df.groupby('Status')['Population'].transform('median'))
     
+    # Remaining missing values handled by global median
+    df = df.fillna(df.median(numeric_only=True))
+
     # 4. Feature Engineering
+    # Resolving Multicollinearity
     cols_to_drop = ['Country', 'Year', 'infant deaths', 'thinness 5-9 years']
     df_eng = df.drop(columns=cols_to_drop)
     
-    # Log Transformation
+    # Normalizing Skewed Data (Log Transformation)
     skewed_cols = ['GDP', 'Population', 'percentage expenditure']
     for col in skewed_cols:
         if col in df_eng.columns:
             df_eng[f'log_{col}'] = np.log1p(df_eng[col])
-    df_eng = df_eng.drop(columns=skewed_cols, errors='ignore')
+    df_eng = df_eng.drop(columns=skewed_cols)
     
-    # Encoding
+    # Encoding Categorical Status
     df_eng = pd.get_dummies(df_eng, columns=['Status'], drop_first=True)
     
-    # Interaction Term (Calculated before scaling for logic)
+    # Interaction Term (Preliminary)
     df_eng['Status_Schooling_Interaction'] = df_eng['Status_Developing'] * df_eng['Schooling']
     
     return df_eng
 
 if __name__ == "__main__":
-    data = preprocess_data('./data/Life Expectancy Data.csv')
-    print(f"Features prepared: {data.columns.tolist()}")
+    # Example usage for local testing
+    PATH = '../data/Life Expectancy Data.csv'
+    raw_df = pd.read_csv(PATH)
+    processed_df = clean_and_engineer(raw_df)
+    print(f"Preprocessing Complete. Features: {processed_df.shape[1]}")

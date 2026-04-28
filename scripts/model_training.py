@@ -6,54 +6,64 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score, mean_absolute_error
 
-def train_and_export_model(df):
-    # 1. Feature/Target Split
-    X = df.drop(columns=['Life expectancy'])
+def train_longevity_model(df):
+    """
+    Performs splitting, scaling, and training. 
+    Exports the final artifacts for deployment.
+    """
+    # 1. Defining Features (X) and Target (y)
+    X = df.select_dtypes(include=[np.number]).drop(columns=['Life expectancy'], errors='ignore')
     y = df['Life expectancy']
-    
-    # 2. Train-Test Split (Problem 1 Resolved: Split happens FIRST)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    # 3. Dynamic Column Identification (Problem 3 Resolved: Interaction logic)
-    # We identify numeric columns, excluding binary indicators
-    binary_cols = ['Status_Developing']
-    numeric_cols = [col for col in X_train.columns if col not in binary_cols]
-    
-    # 4. Fit Scaler ONLY on Training Data (Problem 2 & 5 Resolved)
-    scaler = StandardScaler()
-    X_train_scaled = X_train.copy()
-    X_test_scaled = X_test.copy()
-    
-    X_train_scaled[numeric_cols] = scaler.fit_transform(X_train[numeric_cols])
-    X_test_scaled[numeric_cols] = scaler.transform(X_test[numeric_cols])
-    
-    # 5. Fix Interaction Inconsistency (Problem 3 Resolved)
-    # We re-calculate interaction AFTER scaling the parent features
-    X_train_scaled['Status_Schooling_Interaction'] = X_train_scaled['Status_Developing'] * X_train_scaled['Schooling']
-    X_test_scaled['Status_Schooling_Interaction'] = X_test_scaled['Status_Developing'] * X_test_scaled['Schooling']
 
-    # 6. Training with Explicit Feature Ordering (Problem 4 Resolved)
-    # We ensure the column order is locked before fitting
-    feature_order = X_train_scaled.columns.tolist()
+    # 2. Sequential Splitting (80% Train/Val, 20% Final Test)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
+    
+    # Further split Train into Train (90%) and Val (10%)
+    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.10, random_state=42)
+
+    # 3. Targeted Scaling (Preventing Data Leakage)
+    binary_cols = ['Status_Developing']
+    cols_to_scale = [col for col in X_train.columns if col not in binary_cols]
+    
+    scaler = StandardScaler()
+    
+    # Fit ONLY on X_train
+    X_train[cols_to_scale] = scaler.fit_transform(X_train[cols_to_scale])
+    
+    # Transform Val and Test using Train parameters
+    X_val[cols_to_scale] = scaler.transform(X_val[cols_to_scale])
+    X_test[cols_to_scale] = scaler.transform(X_test[cols_to_scale])
+
+    # 4. Re-calculate Interaction after Scaling
+    for dataset in [X_train, X_val, X_test]:
+        dataset['Status_Schooling_Interaction'] = dataset['Status_Developing'] * dataset['Schooling']
+
+    # 5. Training
     model = LinearRegression()
-    model.fit(X_train_scaled[feature_order], y_train)
-    
-    # 7. Evaluation
-    y_pred = model.predict(X_test_scaled[feature_order])
-    print(f"Deployment Metrics -> R2: {r2_score(y_test, y_pred):.4f}, MAE: {mean_absolute_error(y_test, y_pred):.4f}")
-    
-    # 8. Exporting Artifacts (Problem 5 Resolved)
+    model.fit(X_train, y_train)
+
+    # 6. Evaluation
+    def report_metrics(name, y_true, y_pred):
+        print(f"--- {name} Results ---")
+        print(f"R2: {r2_score(y_true, y_pred):.4f}")
+        print(f"MAE: {mean_absolute_error(y_true, y_pred):.4f}\n")
+
+    report_metrics("Validation Set", y_val, model.predict(X_val))
+    report_metrics("Final Test Set", y_test, model.predict(X_test))
+
+    # 7. Artifact Export
     artifacts = {
         'model': model,
         'scaler': scaler,
-        'feature_order': feature_order,
-        'numeric_cols': numeric_cols
+        'feature_order': X_train.columns.tolist(),
+        'numeric_cols': cols_to_scale
     }
     joblib.dump(artifacts, 'longevity_model_v1.pkl')
-    print("Model Artifacts exported successfully.")
+    print("✅ Model Artifact 'longevity_model_v1.pkl' exported for deployment.")
 
 if __name__ == "__main__":
-    from data_preprocessing import preprocess_data
-    # Load and Preprocess
-    df_ready = preprocess_data('./data/Life Expectancy Data.csv')
-    train_and_export_model(df_ready)
+    from data_preprocessing import clean_and_engineer
+    # Integration logic
+    PATH = '../data/Life Expectancy Data.csv'
+    df_engineered = clean_and_engineer(pd.read_csv(PATH))
+    train_longevity_model(df_engineered)
