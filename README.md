@@ -4,7 +4,7 @@
 This project investigates the primary drivers of global life expectancy using a 15-year longitudinal dataset of 193 countries (From WHO). By integrating clinical indicators (vaccination rates, mortality) with socio-economic features (schooling, GDP), this analysis builds a predictive engine to quantify the Return on Health for different national interventions.
 
 The project transitions from raw, high-missingness data to a refined Multiple Linear Regression model that explains over **81%** of global variance in longevity.
-![View demo here](https://lifeexpectancyanalysis.streamlit.app/)
+[🚀 View Live Demo](https://lifeexpectancyanalysis.streamlit.app)
 ## Key Insights
 * **The "Social Vaccine" (Education):** `Schooling` is the strongest positive predictor of health. The model identifies a "buffer effect" where education significantly mitigates the impact of adult mortality in developing nations.
 * **Clinical Anchors:** `Adult Mortality` and `HIV/AIDS` remain the primary anchors pulling down national life expectancy, serving as the most immediate targets for clinical intervention.
