@@ -40,7 +40,7 @@ A Multiple Linear Regression baseline was established with the following results
 ## Installation & Usage
 1.  **Clone the Repository:**
     ```bash
-    git clone https://github.com/yourusername/global-longevity-ml.git
+    git clone https://github.com/DrKryptoMed/life_expectancy_analysis
     ```
 2.  **Install Dependencies:**
     ```bash
